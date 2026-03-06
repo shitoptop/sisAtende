@@ -27,81 +27,90 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    // Importando de uma forma mais direta e compatível
+	//https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
 
-        // CONFIGURAÇÃO DO SEU PROJETO (Cole o que você copiou do console aqui)
-        const firebaseConfig = {
-             apiKey: "AIzaSyDn47rkGxCNJYRq3S76O4vFVbuGL0oTl7M",
-    authDomain: "movimento-loja.firebaseapp.com",
-    projectId: "movimento-loja",
-    storageBucket: "movimento-loja.firebasestorage.app",
-    messagingSenderId: "602812276095",
-    appId: "1:602812276095:web:66d2aa6436b0f17b620e4a"
-        };
+    const firebaseConfig = {
+  apiKey: "AIzaSyDn47rkGxCNJYRq3S76O4vFVbuGL0oTl7M",
+  authDomain: "movimento-loja.firebaseapp.com",
+  projectId: "movimento-loja",
+  storageBucket: "movimento-loja.firebasestorage.app",
+  messagingSenderId: "602812276095",
+  appId: "1:602812276095:web:66d2aa6436b0f17b620e4a"
+};
 
-        // Inicializar Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const colRef = collection(db, "atendimentos");
+    // 1. Inicializa o App
+    const app = initializeApp(firebaseConfig);
+    
+    // 2. Inicializa o Firestore explicitamente
+    const db = getFirestore(app);
+    const colRef = collection(db, "atendimentos");
 
-        // FUNÇÃO PARA REGISTRAR (Sincroniza com Firebase)
-        window.registrar = async (categoria) => {
-            const agora = new Date();
-            try {
-                await addDoc(colRef, {
-                    categoria: categoria,
-                    timestamp: agora,
-                    dataString: agora.toLocaleDateString('pt-BR'),
-                    diaSemana: agora.toLocaleDateString('pt-BR', { weekday: 'long' }),
-                    hora: agora.toLocaleTimeString('pt-BR')
-                });
-                console.log("Registrado com sucesso!");
-            } catch (e) {
-                alert("Erro ao salvar: " + e);
-            }
-        };
-
-        // ESCUTAR ATUALIZAÇÕES EM TEMPO REAL
-        onSnapshot(query(colRef, orderBy("timestamp", "desc")), (snapshot) => {
-            let atendimentos = [];
-            snapshot.docs.forEach(doc => atendimentos.push(doc.data()));
-            
-            atualizarTela(atendimentos);
-            window.dadosParaExportar = atendimentos; // Global para o CSV
-        });
-
-        function atualizarTela(dados) {
-            const hoje = new Date().toLocaleDateString('pt-BR');
-            document.getElementById('data-atual').innerText = hoje;
-
-            const dadosHoje = dados.filter(d => d.dataString === hoje);
-            
-            const contagem = dadosHoje.reduce((acc, curr) => {
-                acc[curr.categoria] = (acc[curr.categoria] || 0) + 1;
-                return acc;
-            }, {});
-
-            let html = `<strong>Total Hoje: ${dadosHoje.length}</strong><br><br>`;
-            for (let cat in contagem) {
-                html += `<div>${cat}: <strong>${contagem[cat]}</strong></div>`;
-            }
-            document.getElementById('lista-contagem').innerHTML = html;
-        }
-
-        // Exportar para Excel/CSV
-        window.exportarCSV = () => {
-            if (!window.dadosParaExportar) return;
-            let csv = "Data;Hora;Dia;Categoria\n";
-            window.dadosParaExportar.forEach(d => {
-                csv += `${d.dataString};${d.hora};${d.diaSemana};${d.categoria}\n`;
+    // 3. ANEXAR FUNÇÕES AO WINDOW (Essencial para funcionar o onclick do HTML)
+    window.registrar = async (categoria) => {
+        const agora = new Date();
+        try {
+            await addDoc(colRef, {
+                categoria: categoria,
+                timestamp: agora,
+                dataString: agora.toLocaleDateString('pt-BR'),
+                diaSemana: agora.toLocaleDateString('pt-BR', { weekday: 'long' }),
+                hora: agora.toLocaleTimeString('pt-BR')
             });
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = "relatorio_loja.csv";
-            link.click();
-        };
-    </script>
+        } catch (e) {
+            console.error("Erro ao salvar:", e);
+            alert("Erro ao salvar no banco de dados. Verifique o console.");
+        }
+    };
+
+    window.exportarCSV = () => {
+        if (!window.dadosParaExportar || window.dadosParaExportar.length === 0) {
+            alert("Não há dados para exportar ainda.");
+            return;
+        }
+        let csv = "Data;Hora;Dia;Categoria\n";
+        window.dadosParaExportar.forEach(d => {
+            csv += `${d.dataString};${d.hora};${d.diaSemana};${d.categoria}\n`;
+        });
+        const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' }); // \ufeff ajuda o Excel com acentos
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `relatorio_loja_${new Date().toLocaleDateString('pt-BR')}.csv`;
+        link.click();
+    };
+
+    // 4. ESCUTAR ATUALIZAÇÕES
+    onSnapshot(query(colRef, orderBy("timestamp", "desc")), (snapshot) => {
+        let atendimentos = [];
+        snapshot.docs.forEach(doc => atendimentos.push(doc.data()));
+        
+        atualizarTela(atendimentos);
+        window.dadosParaExportar = atendimentos; 
+    });
+
+    function atualizarTela(dados) {
+        const hoje = new Date().toLocaleDateString('pt-BR');
+        document.getElementById('data-atual').innerText = hoje;
+
+        const dadosHoje = dados.filter(d => d.dataString === hoje);
+        
+        const contagem = dadosHoje.reduce((acc, curr) => {
+            acc[curr.categoria] = (acc[curr.categoria] || 0) + 1;
+            return acc;
+        }, {});
+
+        let html = `<strong>Total Hoje: ${dadosHoje.length}</strong><br><br>`;
+        // Garante que todas as categorias apareçam mesmo com zero
+        const categoriasPadrao = ["Venda", "Informações", "Pós-Venda", "Ficha Negada"];
+        categoriasPadrao.forEach(cat => {
+            const qtd = contagem[cat] || 0;
+            html += `<div class="item-resumo">${cat}: <strong>${qtd}</strong></div>`;
+        });
+        
+        document.getElementById('lista-contagem').innerHTML = html;
+    }
+</script>
 </body>
 </html>
